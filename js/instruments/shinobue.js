@@ -73,7 +73,7 @@ function play({ ctx, destination, pitch, velocity, when, duration, params }) {
     lfo.stop(tail);
   }
 
-  const breath = (params.breath ?? 0.35) * vel;
+  const breath = (params.breath ?? 0) * vel;
   const ns = ctx.createBufferSource();
   ns.buffer = noise;
   ns.loop = true;
@@ -123,7 +123,7 @@ registerInstrument({
     },
     { id: 'notation', label: '表記', type: 'select', default: 'number', options: [{ value: 'number', label: '数字譜（呂・甲）' }, { value: 'western', label: '音名（C4…）' }] },
     { id: 'tune', label: 'ピッチ微調整', type: 'range', min: -50, max: 50, step: 1, default: 0, unit: 'セント' },
-    { id: 'breath', label: '息の音（吹き始め）', type: 'range', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { id: 'breath', label: '息の音（吹き始め）', type: 'range', min: 0, max: 1, step: 0.01, default: 0 },
     { id: 'vibrato', label: 'ビブラート', type: 'range', min: 0, max: 40, step: 1, default: 12, unit: 'セント' },
     { id: 'attackBend', label: '当たり（立ち上がりのしゃくり）', type: 'range', min: 0, max: 80, step: 1, default: 30, unit: 'セント' },
   ],

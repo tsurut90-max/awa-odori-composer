@@ -128,7 +128,7 @@
         "choshi": 6,
         "notation": "number",
         "tune": -5,
-        "breath": 0.35,
+        "breath": 0,
         "vibrato": 12,
         "attackBend": 30
       }
