@@ -86,11 +86,11 @@ function play({ ctx, destination, pitch, velocity, when, duration, params }) {
   hiss.frequency.value = 2500;
   const hissGain = ctx.createGain();
   hissGain.gain.value = 0.18;
+  // Breath is only a short puff at the attack; a sustained hiss sounds like background noise on earphones.
   const nAmp = ctx.createGain();
   nAmp.gain.setValueAtTime(0, when);
-  nAmp.gain.linearRampToValueAtTime(0.55 * breath, Math.min(when + 0.01, end));
-  nAmp.gain.setTargetAtTime(0.14 * breath, Math.min(when + 0.02, end), 0.04);
-  nAmp.gain.setTargetAtTime(0, end, release / 3);
+  nAmp.gain.linearRampToValueAtTime(0.55 * breath, when + 0.01);
+  nAmp.gain.setTargetAtTime(0, when + 0.012, 0.035);
   ns.connect(band).connect(nAmp);
   ns.connect(hiss).connect(hissGain).connect(nAmp);
   nAmp.connect(out);
@@ -98,7 +98,7 @@ function play({ ctx, destination, pitch, velocity, when, duration, params }) {
   osc.start(when);
   osc.stop(tail);
   ns.start(when, Math.random() * 1.5);
-  ns.stop(tail);
+  ns.stop(Math.min(tail, when + 0.3));
 
   return {
     stop(at) {
@@ -123,7 +123,7 @@ registerInstrument({
     },
     { id: 'notation', label: '表記', type: 'select', default: 'number', options: [{ value: 'number', label: '数字譜（呂・甲）' }, { value: 'western', label: '音名（C4…）' }] },
     { id: 'tune', label: 'ピッチ微調整', type: 'range', min: -50, max: 50, step: 1, default: 0, unit: 'セント' },
-    { id: 'breath', label: '息の量', type: 'range', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { id: 'breath', label: '息の音（吹き始め）', type: 'range', min: 0, max: 1, step: 0.01, default: 0.35 },
     { id: 'vibrato', label: 'ビブラート', type: 'range', min: 0, max: 40, step: 1, default: 12, unit: 'セント' },
     { id: 'attackBend', label: '当たり（立ち上がりのしゃくり）', type: 'range', min: 0, max: 80, step: 1, default: 30, unit: 'セント' },
   ],
