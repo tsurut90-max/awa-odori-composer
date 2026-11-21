@@ -518,10 +518,7 @@ class App {
         apply(Number(range.value));
         out.textContent = this.formatParam(p, Number(range.value));
       });
-      range.addEventListener('change', () => {
-        done();
-        this.engine.preview(this.song, track, this.selectedNotes()[0]?.pitch ?? (this.roll.rows.find((r) => r.accent)?.pitch ?? 72));
-      });
+      range.addEventListener('change', done);
       field.append(range);
     }
     return field;
