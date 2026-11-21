@@ -64,21 +64,21 @@ function play({ ctx, destination, pitch, velocity, when, params }) {
   if (stroke.voice === 'odaiko') {
     const f = params.odaikoPitch;
     sources.push(
-      tone(ctx, out, { from: f * 1.9, to: f, glide: 0.07, when, peak: 0.9 * v, decay: 0.35 + 1.1 * ring }),
-      tone(ctx, out, { from: f * 3.2, to: f * 1.6, glide: 0.05, when, peak: 0.25 * v, decay: 0.18 + 0.3 * ring }),
-      burst(ctx, out, { when, peak: 0.35 * v, decay: 0.05, filter: 'lowpass', freq: 900 }),
+      tone(ctx, out, { from: f * 1.9, to: f, glide: 0.07, when, peak: 0.5 * v, decay: 0.35 + 1.1 * ring }),
+      tone(ctx, out, { from: f * 3.2, to: f * 1.6, glide: 0.05, when, peak: 0.14 * v, decay: 0.18 + 0.3 * ring }),
+      burst(ctx, out, { when, peak: 0.2 * v, decay: 0.05, filter: 'lowpass', freq: 900 }),
     );
   } else if (stroke.voice === 'rim') {
     sources.push(
-      tone(ctx, out, { type: 'triangle', from: 1250, to: 950, glide: 0.02, when, peak: 0.35 * v, decay: 0.05 }),
-      burst(ctx, out, { when, peak: 0.45 * v, decay: 0.035, filter: 'bandpass', freq: 2600, q: 1.5 }),
+      tone(ctx, out, { type: 'triangle', from: 1250, to: 950, glide: 0.02, when, peak: 0.22 * v, decay: 0.05 }),
+      burst(ctx, out, { when, peak: 0.3 * v, decay: 0.035, filter: 'bandpass', freq: 2600, q: 1.5 }),
     );
   } else {
     const f = params.shimePitch;
     sources.push(
-      tone(ctx, out, { type: 'triangle', from: f * 1.25, to: f, glide: 0.025, when, peak: 0.45 * v, decay: 0.08 + 0.17 * ring }),
-      tone(ctx, out, { from: f * 2.3, to: f * 2.1, glide: 0.02, when, peak: 0.12 * v, decay: 0.06 }),
-      burst(ctx, out, { when, peak: 0.4 * v, decay: 0.03, filter: 'highpass', freq: 3000 }),
+      tone(ctx, out, { type: 'triangle', from: f * 1.25, to: f, glide: 0.025, when, peak: 0.28 * v, decay: 0.08 + 0.17 * ring }),
+      tone(ctx, out, { from: f * 2.3, to: f * 2.1, glide: 0.02, when, peak: 0.08 * v, decay: 0.06 }),
+      burst(ctx, out, { when, peak: 0.25 * v, decay: 0.03, filter: 'highpass', freq: 3000 }),
     );
   }
 

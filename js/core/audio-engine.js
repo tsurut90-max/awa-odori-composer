@@ -13,6 +13,12 @@ function buildMaster(ctx, song) {
   comp.release.value = 0.2;
   const out = ctx.createGain();
   out.gain.value = 0.9;
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -2;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.001;
+  limiter.release.value = 0.1;
 
   const dry = ctx.createGain();
   const wet = ctx.createGain();
@@ -20,7 +26,7 @@ function buildMaster(ctx, song) {
   conv.buffer = makeImpulse(ctx, 2.2, 3.2);
   input.connect(dry).connect(comp);
   input.connect(conv).connect(wet).connect(comp);
-  comp.connect(out).connect(ctx.destination);
+  comp.connect(out).connect(limiter).connect(ctx.destination);
   const setReverb = (amount) => {
     dry.gain.value = 1 - amount * 0.35;
     wet.gain.value = amount * 0.9;
@@ -180,6 +186,7 @@ export class AudioEngine {
     const seconds = ticksToSeconds(song, this.endTick(song)) + 2.5;
     const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
     const master = buildMaster(ctx, song);
+    const events = [];
     for (const track of song.tracks) {
       if (!isAudible(song, track)) continue;
       const def = getInstrument(track.instrument);
@@ -187,9 +194,26 @@ export class AudioEngine {
       const gain = ctx.createGain();
       gain.gain.value = track.volume;
       gain.connect(master.input);
-      for (const n of track.notes) {
-        def.play({ ctx, destination: gain, pitch: n.pitch, velocity: n.vel, when: ticksToSeconds(song, n.tick), duration: ticksToSeconds(song, n.len), params: track.params });
+      for (const n of track.notes) events.push({ def, gain, track, n, when: ticksToSeconds(song, n.tick) });
+    }
+    events.sort((a, b) => a.when - b.when);
+
+    // Creating every voice up front makes the render graph huge and slow, so voices are
+    // created one window at a time while rendering is suspended.
+    const WINDOW = 1;
+    let next = 0;
+    const scheduleUntil = (time) => {
+      while (next < events.length && events[next].when < time) {
+        const { def, gain, track, n, when } = events[next++];
+        def.play({ ctx, destination: gain, pitch: n.pitch, velocity: n.vel, when, duration: ticksToSeconds(song, n.len), params: track.params });
       }
+    };
+    scheduleUntil(WINDOW);
+    for (let k = 1; k * WINDOW < seconds; k++) {
+      ctx.suspend(k * WINDOW).then(() => {
+        scheduleUntil((k + 1) * WINDOW);
+        ctx.resume();
+      });
     }
     return ctx.startRendering();
   }
