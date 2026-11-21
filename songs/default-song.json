@@ -132,6 +132,21 @@
         "vibrato": 12,
         "attackBend": 30
       }
+    },
+    {
+      "id": "trk_taiko",
+      "type": "instrument",
+      "instrument": "taiko",
+      "name": "太鼓",
+      "volume": 0.8,
+      "mute": false,
+      "solo": false,
+      "notes": [],
+      "params": {
+        "odaikoPitch": 62,
+        "shimePitch": 420,
+        "ring": 0.5
+      }
     }
   ]
 }
