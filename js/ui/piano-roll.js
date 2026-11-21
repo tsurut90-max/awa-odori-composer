@@ -34,7 +34,6 @@ export class PianoRoll {
     this.box = null;
     this.follow = true;
     this.pending = false;
-    this.rowH = ROW_H;
     this.bindEvents();
     new ResizeObserver(() => this.invalidate()).observe(scroller);
   }
@@ -45,12 +44,7 @@ export class PianoRoll {
   refreshRows() {
     const track = this.track;
     const def = track && getInstrument(track.instrument);
-    if (track?.id !== this.rowsTrackId) {
-      this.rowsTrackId = track?.id;
-      this.lastLen = null;
-    }
     this.def = def;
-    this.rowH = def?.rowHeight ?? ROW_H;
     this.rows = def ? def.rows(track.params) : [];
     this.rowOf = new Map(this.rows.map((r, i) => [r.pitch, i]));
   }
@@ -70,14 +64,14 @@ export class PianoRoll {
     if (!notes.length) return;
     const idx = notes.map((n) => this.rowOf.get(n.pitch)).filter((i) => i !== undefined);
     const mid = (Math.min(...idx) + Math.max(...idx)) / 2;
-    this.scroller.scrollTop = mid * this.rowH - this.scroller.clientHeight / 2;
+    this.scroller.scrollTop = mid * ROW_H - this.scroller.clientHeight / 2;
   }
 
   // ---- coordinates -------------------------------------------------------
   tickToX(tick) { return tick * this.pxPerTick - this.scroller.scrollLeft; }
   xToTick(x) { return (x + this.scroller.scrollLeft) / this.pxPerTick; }
-  rowToY(row) { return row * this.rowH - this.scroller.scrollTop; }
-  yToRow(y) { return Math.floor((y + this.scroller.scrollTop) / this.rowH); }
+  rowToY(row) { return row * ROW_H - this.scroller.scrollTop; }
+  yToRow(y) { return Math.floor((y + this.scroller.scrollTop) / ROW_H); }
   snapTick(t, mode = 'round') { return Math[mode](t / this.snap) * this.snap; }
 
   noteLen(n) {
@@ -294,8 +288,8 @@ export class PianoRoll {
       for (const n of this.track.notes) {
         const nx0 = n.tick * this.pxPerTick;
         const nx1 = (n.tick + this.noteLen(n)) * this.pxPerTick;
-        const ny0 = (this.rowOf.get(n.pitch) ?? -99) * this.rowH;
-        if (nx1 >= x0 && nx0 <= x1 && ny0 + this.rowH >= y0 && ny0 <= y1) this.selection.add(n);
+        const ny0 = (this.rowOf.get(n.pitch) ?? -99) * ROW_H;
+        if (nx1 >= x0 && nx0 <= x1 && ny0 + ROW_H >= y0 && ny0 <= y1) this.selection.add(n);
       }
       this.app.selectionChanged();
       this.invalidate();
@@ -365,7 +359,7 @@ export class PianoRoll {
     const height = this.scroller.clientHeight;
     const endTick = this.app.engine.endTick(song) + ticksPerBar(song) * 8;
     this.spacer.style.width = `${endTick * this.pxPerTick}px`;
-    this.spacer.style.height = `${this.rows.length * this.rowH}px`;
+    this.spacer.style.height = `${this.rows.length * ROW_H}px`;
 
     if (this.follow && this.app.engine.playing) this.ensureVisible(this.app.currentTick());
 
@@ -387,9 +381,9 @@ export class PianoRoll {
       const row = this.rows[r];
       const y = this.rowToY(r);
       g.fillStyle = row.inScale ? css('--row-in') : css('--row-out');
-      g.fillRect(0, y, width, this.rowH);
+      g.fillRect(0, y, width, ROW_H);
       g.fillStyle = row.accent ? css('--line-bar') : css('--line-sub');
-      g.fillRect(0, y + this.rowH - 1, width, 1);
+      g.fillRect(0, y + ROW_H - 1, width, 1);
     }
     this.drawLoopShade(g, height);
     this.drawVerticalLines(g, width, height);
@@ -410,13 +404,13 @@ export class PianoRoll {
       const sel = this.selection.has(n);
       g.globalAlpha = 0.45 + 0.55 * n.vel;
       g.fillStyle = sel ? css('--note-selected') : color;
-      g.fillRect(x, y, w, this.rowH - 2);
+      g.fillRect(x, y, w, ROW_H - 2);
       g.globalAlpha = 1;
       g.strokeStyle = sel ? '#fff' : 'rgba(0,0,0,0.45)';
-      g.strokeRect(x + 0.5, y + 0.5, w - 1, this.rowH - 3);
+      g.strokeRect(x + 0.5, y + 0.5, w - 1, ROW_H - 3);
       if (w > 30) {
         g.fillStyle = sel ? '#111' : '#fff';
-        g.fillText(this.rows[r].label, x + 4, y + this.rowH / 2 - 1, w - 6);
+        g.fillText(this.rows[r].label, x + 4, y + ROW_H / 2 - 1, w - 6);
       }
     }
     if (this.box) {
@@ -486,15 +480,15 @@ export class PianoRoll {
       const row = this.rows[r];
       const y = this.rowToY(r);
       g.fillStyle = row.inScale ? css('--key-in') : css('--key-out');
-      g.fillRect(0, y, W, this.rowH - 1);
+      g.fillRect(0, y, W, ROW_H - 1);
       g.fillStyle = row.inScale ? css('--text') : css('--text-dim');
       g.font = row.accent ? 'bold 12px sans-serif' : '12px sans-serif';
-      g.fillText(row.label, 8, y + this.rowH / 2);
+      g.fillText(row.label, 8, y + ROW_H / 2);
       if (row.sub) {
         g.fillStyle = css('--text-dim');
         g.font = '10px sans-serif';
         g.textAlign = 'right';
-        g.fillText(row.sub, W - 6, y + this.rowH / 2);
+        g.fillText(row.sub, W - 6, y + ROW_H / 2);
         g.textAlign = 'left';
       }
     }

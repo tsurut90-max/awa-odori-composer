@@ -3,7 +3,6 @@
 //   params: [{ id, label, type: 'select'|'range', default, options?|min/max/step }]
 //   rows(params) -> [{ pitch, label, sub?, inScale?, accent? }] ordered top to bottom
 //   defaultLength: ticks for a newly drawn note
-//   rowHeight?: pixel height of one editor row (default 18)
 //   play({ ctx, destination, pitch, velocity, when, duration, params }) -> { stop(at) }
 const instruments = new Map();
 

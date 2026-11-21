@@ -498,7 +498,7 @@ class App {
       });
       range.addEventListener('change', () => {
         done();
-        this.engine.preview(this.song, track, this.selectedNotes()[0]?.pitch ?? (this.roll.rows.find((r) => r.accent) ?? this.roll.rows.at(-1))?.pitch);
+        this.engine.preview(this.song, track, this.selectedNotes()[0]?.pitch ?? (this.roll.rows.find((r) => r.accent)?.pitch ?? 72));
       });
       field.append(range);
     }
