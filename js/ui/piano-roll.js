@@ -2,7 +2,9 @@ import { TPB, ticksPerBar } from '../core/song.js';
 import { getInstrument } from '../instruments/registry.js';
 
 const ROW_H = 18;
+const TOUCH_ROW_H = 28;
 const EDGE = 7;
+const TAP_SLOP = 10;
 
 const cssCache = new Map();
 const css = (name) => {
@@ -34,6 +36,9 @@ export class PianoRoll {
     this.box = null;
     this.follow = true;
     this.pending = false;
+    this.touch = null;
+    this.lastPointerType = 'mouse';
+    this.rowH = matchMedia('(pointer: coarse)').matches ? TOUCH_ROW_H : ROW_H;
     this.bindEvents();
     new ResizeObserver(() => this.invalidate()).observe(scroller);
   }
@@ -64,30 +69,29 @@ export class PianoRoll {
     if (!notes.length) return;
     const idx = notes.map((n) => this.rowOf.get(n.pitch)).filter((i) => i !== undefined);
     const mid = (Math.min(...idx) + Math.max(...idx)) / 2;
-    this.scroller.scrollTop = mid * ROW_H - this.scroller.clientHeight / 2;
+    this.scroller.scrollTop = mid * this.rowH - this.scroller.clientHeight / 2;
   }
 
   // ---- coordinates -------------------------------------------------------
   tickToX(tick) { return tick * this.pxPerTick - this.scroller.scrollLeft; }
   xToTick(x) { return (x + this.scroller.scrollLeft) / this.pxPerTick; }
-  rowToY(row) { return row * ROW_H - this.scroller.scrollTop; }
-  yToRow(y) { return Math.floor((y + this.scroller.scrollTop) / ROW_H); }
+  rowToY(row) { return row * this.rowH - this.scroller.scrollTop; }
+  yToRow(y) { return Math.floor((y + this.scroller.scrollTop) / this.rowH); }
   snapTick(t, mode = 'round') { return Math[mode](t / this.snap) * this.snap; }
 
   noteLen(n) {
     return this.def?.kind === 'percussion' ? Math.min(n.len, this.snap) : n.len;
   }
 
-  hitNote(x, y) {
+  hitNote(x, y, slop = 0) {
     const track = this.track;
     if (!track) return null;
     const row = this.yToRow(y);
-    const tick = this.xToTick(x);
     for (let i = track.notes.length - 1; i >= 0; i--) {
       const n = track.notes[i];
       if (this.rowOf.get(n.pitch) !== row) continue;
-      if (tick >= n.tick && tick < n.tick + this.noteLen(n)) {
-        const right = this.tickToX(n.tick + this.noteLen(n));
+      const right = this.tickToX(n.tick + this.noteLen(n));
+      if (x >= this.tickToX(n.tick) - slop && x < right + slop) {
         const canResize = this.def.kind !== 'percussion';
         return { note: n, edge: canResize && right - x <= EDGE && right - this.tickToX(n.tick) > EDGE * 2 };
       }
@@ -111,7 +115,9 @@ export class PianoRoll {
     sc.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     sc.addEventListener('pointermove', (e) => this.onPointerMove(e));
     sc.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    sc.addEventListener('pointercancel', () => { this.touch = null; });
     sc.addEventListener('dblclick', (e) => {
+      if (this.lastPointerType === 'touch') return;
       const { x, y } = this.localPos(e);
       const hit = this.hitNote(x, y);
       if (!hit) return;
@@ -122,6 +128,7 @@ export class PianoRoll {
     });
     sc.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (this.lastPointerType === 'touch') return;
       const { x, y } = this.localPos(e);
       const hit = this.hitNote(x, y);
       if (!hit) return;
@@ -168,10 +175,50 @@ export class PianoRoll {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
+  // Touch: one finger scrolls natively; a touch that ends without moving is a tap.
+  tap(x, y) {
+    const hit = this.hitNote(x, y, TAP_SLOP);
+    if (hit) {
+      this.selection = new Set([hit.note]);
+      this.app.selectionChanged();
+      this.app.engine.preview(this.app.song, this.track, hit.note.pitch, hit.note.vel);
+      return;
+    }
+    if (this.selection.size) {
+      this.selection.clear();
+      this.app.selectionChanged();
+      return;
+    }
+    if (this.createNote(this.xToTick(x), this.yToRow(y))) this.app.changed();
+  }
+
+  createNote(tick, row) {
+    const rowInfo = this.rows[row];
+    if (!rowInfo || tick < 0) return null;
+    this.app.checkpoint();
+    const note = {
+      tick: Math.max(0, this.snapTick(tick, 'floor')),
+      len: this.lastLen ?? this.def.defaultLength,
+      pitch: rowInfo.pitch,
+      vel: 0.8,
+    };
+    this.track.notes.push(note);
+    this.track.notes.sort((a, b) => a.tick - b.tick);
+    this.selection = new Set([note]);
+    this.app.selectionChanged();
+    this.app.engine.preview(this.app.song, this.track, note.pitch, note.vel);
+    return note;
+  }
+
   onPointerDown(e) {
+    this.lastPointerType = e.pointerType;
     if (e.button !== 0 || !this.track) return;
     const { x, y } = this.localPos(e);
     if (x > this.scroller.clientWidth || y > this.scroller.clientHeight) return;
+    if (e.pointerType === 'touch') {
+      this.touch = { id: e.pointerId, x, y, moved: false };
+      return;
+    }
     this.scroller.setPointerCapture(e.pointerId);
     const hit = this.hitNote(x, y);
     const tick = this.xToTick(x);
@@ -198,20 +245,8 @@ export class PianoRoll {
       return;
     }
 
-    const rowInfo = this.rows[row];
-    if (!rowInfo || tick < 0) return;
-    this.app.checkpoint();
-    const note = {
-      tick: Math.max(0, this.snapTick(tick, 'floor')),
-      len: this.lastLen ?? this.def.defaultLength,
-      pitch: rowInfo.pitch,
-      vel: 0.8,
-    };
-    this.track.notes.push(note);
-    this.track.notes.sort((a, b) => a.tick - b.tick);
-    this.selection = new Set([note]);
-    this.app.selectionChanged();
-    this.app.engine.preview(this.app.song, this.track, note.pitch, note.vel);
+    const note = this.createNote(tick, row);
+    if (!note) return;
     this.startDrag(this.def.kind === 'percussion' ? 'move' : 'resize', tick, row, note, true, x);
     this.app.changed();
   }
@@ -233,6 +268,11 @@ export class PianoRoll {
 
   onPointerMove(e) {
     const { x, y } = this.localPos(e);
+    if (this.touch?.id === e.pointerId) {
+      if (Math.hypot(x - this.touch.x, y - this.touch.y) > TAP_SLOP) this.touch.moved = true;
+      return;
+    }
+    if (e.pointerType === 'touch') return;
     if (!this.drag) {
       const hit = this.hitNote(x, y);
       this.scroller.style.cursor = hit ? (hit.edge ? 'ew-resize' : 'grab') : 'crosshair';
@@ -276,6 +316,12 @@ export class PianoRoll {
   }
 
   onPointerUp(e) {
+    if (this.touch?.id === e.pointerId) {
+      const t = this.touch;
+      this.touch = null;
+      if (!t.moved) this.tap(t.x, t.y);
+      return;
+    }
     if (!this.drag) return;
     this.onPointerMove(e);
     const d = this.drag;
@@ -288,8 +334,8 @@ export class PianoRoll {
       for (const n of this.track.notes) {
         const nx0 = n.tick * this.pxPerTick;
         const nx1 = (n.tick + this.noteLen(n)) * this.pxPerTick;
-        const ny0 = (this.rowOf.get(n.pitch) ?? -99) * ROW_H;
-        if (nx1 >= x0 && nx0 <= x1 && ny0 + ROW_H >= y0 && ny0 <= y1) this.selection.add(n);
+        const ny0 = (this.rowOf.get(n.pitch) ?? -99) * this.rowH;
+        if (nx1 >= x0 && nx0 <= x1 && ny0 + this.rowH >= y0 && ny0 <= y1) this.selection.add(n);
       }
       this.app.selectionChanged();
       this.invalidate();
@@ -359,7 +405,7 @@ export class PianoRoll {
     const height = this.scroller.clientHeight;
     const endTick = this.app.engine.endTick(song) + ticksPerBar(song) * 8;
     this.spacer.style.width = `${endTick * this.pxPerTick}px`;
-    this.spacer.style.height = `${this.rows.length * ROW_H}px`;
+    this.spacer.style.height = `${this.rows.length * this.rowH}px`;
 
     if (this.follow && this.app.engine.playing) this.ensureVisible(this.app.currentTick());
 
@@ -381,9 +427,9 @@ export class PianoRoll {
       const row = this.rows[r];
       const y = this.rowToY(r);
       g.fillStyle = row.inScale ? css('--row-in') : css('--row-out');
-      g.fillRect(0, y, width, ROW_H);
+      g.fillRect(0, y, width, this.rowH);
       g.fillStyle = row.accent ? css('--line-bar') : css('--line-sub');
-      g.fillRect(0, y + ROW_H - 1, width, 1);
+      g.fillRect(0, y + this.rowH - 1, width, 1);
     }
     this.drawLoopShade(g, height);
     this.drawVerticalLines(g, width, height);
@@ -404,13 +450,13 @@ export class PianoRoll {
       const sel = this.selection.has(n);
       g.globalAlpha = 0.45 + 0.55 * n.vel;
       g.fillStyle = sel ? css('--note-selected') : color;
-      g.fillRect(x, y, w, ROW_H - 2);
+      g.fillRect(x, y, w, this.rowH - 2);
       g.globalAlpha = 1;
       g.strokeStyle = sel ? '#fff' : 'rgba(0,0,0,0.45)';
-      g.strokeRect(x + 0.5, y + 0.5, w - 1, ROW_H - 3);
+      g.strokeRect(x + 0.5, y + 0.5, w - 1, this.rowH - 3);
       if (w > 30) {
         g.fillStyle = sel ? '#111' : '#fff';
-        g.fillText(this.rows[r].label, x + 4, y + ROW_H / 2 - 1, w - 6);
+        g.fillText(this.rows[r].label, x + 4, y + this.rowH / 2 - 1, w - 6);
       }
     }
     if (this.box) {
@@ -480,15 +526,15 @@ export class PianoRoll {
       const row = this.rows[r];
       const y = this.rowToY(r);
       g.fillStyle = row.inScale ? css('--key-in') : css('--key-out');
-      g.fillRect(0, y, W, ROW_H - 1);
+      g.fillRect(0, y, W, this.rowH - 1);
       g.fillStyle = row.inScale ? css('--text') : css('--text-dim');
       g.font = row.accent ? 'bold 12px sans-serif' : '12px sans-serif';
-      g.fillText(row.label, 8, y + ROW_H / 2);
-      if (row.sub) {
+      g.fillText(row.label, 8, y + this.rowH / 2);
+      if (row.sub && W >= 90) {
         g.fillStyle = css('--text-dim');
         g.font = '10px sans-serif';
         g.textAlign = 'right';
-        g.fillText(row.sub, W - 6, y + ROW_H / 2);
+        g.fillText(row.sub, W - 6, y + this.rowH / 2);
         g.textAlign = 'left';
       }
     }

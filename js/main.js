@@ -110,10 +110,12 @@ class App {
     this.undoStack.push(JSON.stringify(this.song));
     if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
     this.redoStack = [];
+    this.updateToolbar();
   }
 
   dropCheckpointIfUnchanged() {
     if (this.undoStack[this.undoStack.length - 1] === JSON.stringify(this.song)) this.undoStack.pop();
+    this.updateToolbar();
   }
 
   restore(from, to) {
@@ -136,6 +138,7 @@ class App {
   changed(full = true) {
     this.roll.invalidate();
     this.renderNoteInfo();
+    this.updateToolbar();
     if (full) {
       this.scheduleAutosave();
       this.engine.updateMix(this.song);
@@ -144,7 +147,18 @@ class App {
 
   selectionChanged() {
     this.renderNoteInfo();
+    this.updateToolbar();
     this.roll.invalidate();
+  }
+
+  updateToolbar() {
+    const count = this.selectedNotes().length;
+    const percussion = getInstrument(this.editTrack()?.instrument)?.kind === 'percussion';
+    for (const id of ['tbUp', 'tbDown', 'tbLeft', 'tbRight', 'tbDup', 'tbDelete']) $(id).disabled = !count;
+    for (const id of ['tbShorter', 'tbLonger']) $(id).disabled = !count || percussion;
+    $('tbUndo').disabled = !this.undoStack.length;
+    $('tbRedo').disabled = !this.redoStack.length;
+    $('tbInfo').textContent = count ? `${count}個選択中` : '';
   }
 
   scheduleAutosave() {
@@ -251,6 +265,13 @@ class App {
     const sel = this.selectedNotes();
     if (!sel.length || Math.min(...sel.map((n) => n.tick)) + ticks < 0) return;
     this.editNotes(null, () => sel.forEach((n) => { n.tick += ticks; }));
+  }
+
+  resizeSelection(ticks) {
+    const sel = this.selectedNotes();
+    if (!sel.length) return;
+    const min = this.roll.snap;
+    this.editNotes(null, () => sel.forEach((n) => { n.len = Math.max(min, n.len + ticks); }));
   }
 
   quantize() {
@@ -395,6 +416,7 @@ class App {
     this.renderTrackSettings();
     this.renderNoteInfo();
     this.updateTransport();
+    this.updateToolbar();
     this.roll.invalidate();
   }
 
@@ -633,7 +655,47 @@ class App {
     });
     $('btnHelp').addEventListener('click', () => $('help').showModal());
 
+    const toolbar = {
+      tbUndo: () => this.undo(),
+      tbRedo: () => this.redo(),
+      tbUp: () => this.transposeSelection(1),
+      tbDown: () => this.transposeSelection(-1),
+      tbLeft: () => this.shiftSelection(-this.roll.snap),
+      tbRight: () => this.shiftSelection(this.roll.snap),
+      tbShorter: () => this.resizeSelection(-this.roll.snap),
+      tbLonger: () => this.resizeSelection(this.roll.snap),
+      tbDup: () => this.duplicateSelection(),
+      tbDelete: () => this.deleteSelection(),
+    };
+    for (const [id, fn] of Object.entries(toolbar)) $(id).addEventListener('click', fn);
+
+    $('btnMenu').addEventListener('click', () => this.setMenu(!$('fileActions').classList.contains('open')));
+    $('fileActions').addEventListener('click', (e) => { if (e.target.closest('button')) this.setMenu(false); });
+    document.addEventListener('pointerdown', (e) => {
+      if (!$('fileActions').classList.contains('open') || e.target.closest('#fileActions, #btnMenu')) return;
+      this.setMenu(false);
+      if (e.target.closest('.editor')) e.stopPropagation();
+    }, true);
+    $('btnMore').addEventListener('click', () => {
+      const open = $('transportMore').classList.toggle('open');
+      $('btnMore').setAttribute('aria-expanded', String(open));
+    });
+    $('btnPanel').addEventListener('click', () => this.setDrawer(true));
+    $('btnPanelClose').addEventListener('click', () => this.setDrawer(false));
+    $('drawerBackdrop').addEventListener('click', () => this.setDrawer(false));
+
     document.addEventListener('keydown', (e) => this.onKey(e));
+  }
+
+  setMenu(open) {
+    $('fileActions').classList.toggle('open', open);
+    $('btnMenu').setAttribute('aria-expanded', String(open));
+  }
+
+  setDrawer(open) {
+    $('sidebar').classList.toggle('open', open);
+    $('drawerBackdrop').hidden = !open;
+    $('btnPanel').setAttribute('aria-expanded', String(open));
   }
 
   toggleLoop() {
@@ -645,6 +707,11 @@ class App {
   onKey(e) {
     const t = e.target;
     if (t.closest?.('dialog')) return;
+    if (e.key === 'Escape' && ($('sidebar').classList.contains('open') || $('fileActions').classList.contains('open'))) {
+      this.setDrawer(false);
+      this.setMenu(false);
+      return;
+    }
     const typing = (t.tagName === 'INPUT' && !['range', 'checkbox', 'button'].includes(t.type)) || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
     if (typing) return;
     const mod = e.ctrlKey || e.metaKey;
